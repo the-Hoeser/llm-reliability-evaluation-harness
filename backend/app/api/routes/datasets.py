@@ -164,7 +164,10 @@ async def import_jsonl_dataset(
             }
             for error in exc.errors()
         ]
-        raise HTTPException(status_code=422, detail={"message": "Dataset validation failed.", "errors": errors}) from exc
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "Dataset validation failed.", "errors": errors},
+        ) from exc
 
     if not payload.test_cases:
         raise HTTPException(status_code=422, detail="The JSONL file contains no test cases.")
