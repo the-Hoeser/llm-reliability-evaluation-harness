@@ -95,8 +95,12 @@ class EvaluationRun(TimestampMixin, Base):
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued", server_default="queued")
     system_prompt_snapshot: Mapped[str | None] = mapped_column(Text)
-    model_config_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
-    evaluator_config_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    model_config_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    evaluator_config_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
     summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
