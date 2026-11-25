@@ -154,7 +154,8 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    void refreshData();
+    const timer = window.setTimeout(() => void refreshData(), 0);
+    return () => window.clearTimeout(timer);
   }, [refreshData]);
 
   const activeExperiment = useMemo(
