@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import EvaluationRun, TestResult
+from app.db.models import EvaluationRun, TestCase, TestResult
 from app.db.session import get_db
 from app.schemas import RunDetail, TestResultRead
 
@@ -20,8 +20,9 @@ def get_run(run_id: UUID, db: Session = Depends(get_db)) -> RunDetail:
     results = list(
         db.scalars(
             select(TestResult)
+            .join(TestCase, TestCase.id == TestResult.test_case_id)
             .where(TestResult.run_id == run_id)
-            .order_by(TestResult.created_at, TestResult.id)
+            .order_by(TestCase.external_id)
         )
     )
     return RunDetail(
