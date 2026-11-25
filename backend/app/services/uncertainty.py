@@ -11,10 +11,7 @@ class UncertaintyResponseError(ValueError):
     """The model did not satisfy the structured uncertainty response contract."""
 
 
-def validate_uncertainty_dataset_case(expected_output: Any, context: Any) -> None:
-    """Validate one closed-context test case before it enters an experiment."""
-    if not isinstance(context, (str, dict, list)) or not context:
-        raise ValueError("Every uncertainty test case must contain non-empty context.")
+def _validate_expected_output(expected_output: Any) -> None:
     if not isinstance(expected_output, dict):
         raise ValueError("Uncertainty test cases require an object expected_output.")
 
@@ -35,6 +32,12 @@ def validate_uncertainty_dataset_case(expected_output: Any, context: Any) -> Non
                 "Answerable cases require a non-empty acceptable_answers string list."
             )
 
+
+def validate_uncertainty_dataset_case(expected_output: Any, context: Any) -> None:
+    """Validate one closed-context test case before it enters an experiment."""
+    if not isinstance(context, (str, dict, list)) or not context:
+        raise ValueError("Every uncertainty test case must contain non-empty context.")
+    _validate_expected_output(expected_output)
 
 def parse_uncertainty_response(raw_output: str, policy: str) -> dict[str, Any]:
     """Parse the public JSON response contract; never infer confidence from prose."""
@@ -85,7 +88,7 @@ def evaluate_uncertainty_case(
     policy: str,
 ) -> dict[str, Any]:
     """Score answer/abstain behaviour and attempted-answer confidence separately."""
-    validate_uncertainty_dataset_case(expected_output, context={"validated": True})
+    _validate_expected_output(expected_output)
     parsed = parse_uncertainty_response(raw_output, policy)
     answerability = expected_output["answerability"]
     should_abstain = answerability != "answerable"
