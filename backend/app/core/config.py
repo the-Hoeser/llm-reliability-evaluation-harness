@@ -1,7 +1,22 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
+
+def load_local_environment(env_file: Path = ENV_FILE) -> None:
+    """Expose .env secrets to provider adapters without overriding shell env vars."""
+    load_dotenv(dotenv_path=env_file, override=False)
+
+
+# Pydantic Settings reads declared app settings. Adapters use dynamically named
+# secrets (for example OPENAI_API_KEY), so expose .env values to os.environ too.
+load_local_environment()
 
 
 class Settings(BaseSettings):
@@ -13,7 +28,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[2] / ".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
