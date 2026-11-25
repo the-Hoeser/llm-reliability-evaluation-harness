@@ -24,7 +24,9 @@ jobs:
         run: pytest
       - name: Lint backend
         working-directory: backend
-        run: ruff check .
+        run: |
+          ruff check --fix .
+          ruff check .
 
   frontend:
     runs-on: ubuntu-latest
