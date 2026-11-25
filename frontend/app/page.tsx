@@ -122,7 +122,6 @@ export default function HomePage() {
   const [selectedModel, setSelectedModel] = useState("");
 
   const refreshData = useCallback(async () => {
-    setError("");
     try {
       const [datasetData, modelData, experimentData] = await Promise.all([
         apiRequest<DatasetItem[]>("/datasets"),
