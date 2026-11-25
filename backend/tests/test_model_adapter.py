@@ -43,9 +43,33 @@ def test_openai_compatible_adapter_sends_request_and_reads_usage(monkeypatch) ->
     }
     assert captured["payload"]["temperature"] == 0
     assert "unused_parameter" not in captured["payload"]
+    assert "response_format" not in captured["payload"]
     assert result.output_text == "Paris"
     assert result.prompt_tokens == 7
     assert result.completion_tokens == 2
+
+
+def test_adapter_can_request_json_mode(monkeypatch) -> None:
+    monkeypatch.setenv("RELIABILITY_TEST_KEY", "test-secret")
+    captured = {}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update(json)
+        return FakeResponse()
+
+    monkeypatch.setattr("app.services.model_adapter.httpx.post", fake_post)
+    adapter = OpenAICompatibleAdapter(
+        model_id="test-model",
+        endpoint_url="https://provider.example/v1",
+        api_key_env="RELIABILITY_TEST_KEY",
+    )
+    adapter.generate(
+        input_text="Return JSON.",
+        system_prompt="Return a JSON object.",
+        parameters={},
+        json_mode=True,
+    )
+    assert captured["response_format"] == {"type": "json_object"}
 
 
 def test_adapter_fails_clearly_when_credential_is_missing(monkeypatch) -> None:

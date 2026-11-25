@@ -23,6 +23,7 @@ class ModelAdapter(Protocol):
         input_text: str,
         system_prompt: str | None,
         parameters: dict[str, Any],
+        json_mode: bool = False,
     ) -> ModelResponse: ...
 
 
@@ -48,6 +49,7 @@ class OpenAICompatibleAdapter:
         input_text: str,
         system_prompt: str | None,
         parameters: dict[str, Any],
+        json_mode: bool = False,
     ) -> ModelResponse:
         api_key = os.getenv(self.api_key_env)
         if not api_key:
@@ -66,6 +68,8 @@ class OpenAICompatibleAdapter:
         }
         allowed_parameters = {"temperature", "top_p", "max_tokens", "seed"}
         payload.update({key: value for key, value in parameters.items() if key in allowed_parameters})
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
 
         try:
             response = httpx.post(
@@ -89,7 +93,9 @@ class OpenAICompatibleAdapter:
             output_text = body["choices"][0]["message"]["content"]
             usage = body.get("usage") or {}
         except (ValueError, KeyError, IndexError, TypeError) as exc:
-            raise ModelAdapterError("The model provider returned an unexpected response shape.") from exc
+            raise ModelAdapterError(
+                "The model provider returned an unexpected response shape."
+            ) from exc
 
         if not isinstance(output_text, str):
             raise ModelAdapterError("The model provider returned non-text message content.")

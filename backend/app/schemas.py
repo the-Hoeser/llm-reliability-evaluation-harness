@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-SUPPORTED_EVALUATORS = {"normalized_exact_match"}
+SUPPORTED_EVALUATORS = {"normalized_exact_match", "forced_answer_v1", "abstention_calibration_v1"}
 SUPPORTED_MODEL_PARAMETERS = {"temperature", "top_p", "max_tokens", "seed"}
 
 
@@ -105,7 +105,7 @@ class ExperimentCreate(BaseModel):
         method = self.evaluator_config.get("method", "normalized_exact_match")
         if method not in SUPPORTED_EVALUATORS:
             raise ValueError(
-                "The first release supports only the normalized_exact_match evaluator."
+                "Supported evaluators: normalized_exact_match, forced_answer_v1, abstention_calibration_v1."
             )
         self.evaluator_config = {"method": method}
         return self
@@ -140,6 +140,8 @@ class TestResultRead(BaseModel):
     status: str
     model_output: str | None
     score: float | None
+    confidence: float | None
+    abstained: bool | None
     failure_category: str | None
     metrics: dict[str, Any]
     latency_ms: int | None

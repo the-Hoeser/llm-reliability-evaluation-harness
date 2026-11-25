@@ -2,7 +2,7 @@ from app.services.model_adapter import ModelResponse
 
 
 class FakeAdapter:
-    def generate(self, *, input_text, system_prompt, parameters):
+    def generate(self, *, input_text, system_prompt, parameters, json_mode=False):
         if "capital of France" in input_text:
             return ModelResponse(output_text="Paris", prompt_tokens=8, completion_tokens=2)
         return ModelResponse(output_text="An unverified answer", prompt_tokens=6, completion_tokens=4)

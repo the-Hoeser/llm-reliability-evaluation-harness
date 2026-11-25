@@ -114,6 +114,8 @@ class TestResult(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     model_output: Mapped[str | None] = mapped_column(Text)
     score: Mapped[float | None] = mapped_column(Float)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    abstained: Mapped[bool | None] = mapped_column(Boolean)
     failure_category: Mapped[str | None] = mapped_column(String(80), index=True)
     metrics: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     latency_ms: Mapped[int | None] = mapped_column(Integer)

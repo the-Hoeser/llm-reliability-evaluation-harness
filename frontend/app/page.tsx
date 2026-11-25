@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import {
-  Activity, ArrowRight, Boxes, CheckCircle2, CircleAlert, Database,
+  Activity, ArrowRight, BookOpen, Boxes, CheckCircle2, CircleAlert, Database,
   FlaskConical, Layers3, LoaderCircle, ShieldCheck, TerminalSquare,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,8 @@ type ResultItem = {
   status: string;
   model_output: string | null;
   score: number | null;
+  confidence: number | null;
+  abstained: boolean | null;
   failure_category: string | null;
   latency_ms: number | null;
   error_message: string | null;
@@ -58,6 +60,17 @@ type RunItem = {
     scored?: number;
     unscored?: number;
     mean_score?: number | null;
+    evaluation_mode?: string;
+    coverage?: number | null;
+    decision_accuracy?: number | null;
+    answer_accuracy_on_attempted_answerable?: number | null;
+    unknown_abstention_recall?: number | null;
+    false_answer_rate_on_unknown?: number | null;
+    unnecessary_abstention_rate?: number | null;
+    confidence_brier_score?: number | null;
+    confidence_ece_10bin?: number | null;
+    confidence_calibration_sample_size?: number;
+    invalid_responses?: number;
     failure_categories?: Record<string, number>;
   };
   results: ResultItem[];
@@ -120,6 +133,7 @@ export default function HomePage() {
   const [systemPrompt, setSystemPrompt] = useState("Answer briefly and precisely.");
   const [selectedDatasetVersion, setSelectedDatasetVersion] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
+  const [evaluatorMethod, setEvaluatorMethod] = useState("abstention_calibration_v1");
 
   const refreshData = useCallback(async () => {
     try {
@@ -192,6 +206,38 @@ export default function HomePage() {
     }
   }
 
+  async function importJsonlDataset(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const importName = datasetName.trim() || file.name.split(".").slice(0, -1).join(".");
+      const response = await fetch(
+        `${API_BASE}/datasets/import-jsonl?name=${encodeURIComponent(importName)}`,
+        { method: "POST", body: form, cache: "no-store" },
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const detail = body?.detail || `Import failed with status ${response.status}`;
+        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      }
+      const created = await response.json() as { version_id: string; test_case_count: number };
+      await refreshData();
+      setSelectedDatasetVersion(created.version_id);
+      setMessage(`Imported ${created.test_case_count} test cases as immutable dataset version 1.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "JSONL import failed.");
+    } finally {
+      setBusy(false);
+      event.target.value = "";
+    }
+  }
+
   async function createModel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -236,7 +282,7 @@ export default function HomePage() {
           dataset_version_id: selectedDatasetVersion,
           model_config_id: selectedModel,
           system_prompt: systemPrompt || null,
-          evaluator_config: { method: "normalized_exact_match" },
+          evaluator_config: { method: evaluatorMethod },
         }),
       });
       await refreshData();
@@ -262,7 +308,7 @@ export default function HomePage() {
       });
       const detail = await apiRequest<RunItem>(`/runs/${run.id}`);
       setLatestRun(detail);
-      setMessage("Evaluation run finished and results were retrieved from the API.");
+      setMessage("Evaluation run finished. Raw responses and research metrics were retrieved from the API.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Evaluation run failed.");
     } finally {
@@ -273,6 +319,11 @@ export default function HomePage() {
 
   const meanScore = latestRun?.summary.mean_score;
   const meanScoreText = typeof meanScore === "number" ? `${(meanScore * 100).toFixed(1)}%` : "—";
+  const percent = (value?: number | null) =>
+    typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—";
+  const numberText = (value?: number | null) =>
+    typeof value === "number" ? value.toFixed(3) : "—";
+  const isUncertaintyRun = Boolean(latestRun?.summary.evaluation_mode);
 
   return (
     <div className="min-h-screen">
@@ -289,6 +340,7 @@ export default function HomePage() {
             <a className="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50" href="#models"><Boxes className="size-4" /> Models</a>
             <a className="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50" href="#experiments"><FlaskConical className="size-4" /> Experiments</a>
             <a className="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50" href="#latest-run"><ShieldCheck className="size-4" /> Latest run</a>
+            <a className="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50" href="https://github.com/the-Hoeser/llm-reliability-evaluation-harness/blob/sprint-2-uncertainty-research/research/RESEARCH_LOG.md" target="_blank" rel="noreferrer"><BookOpen className="size-4" /> Research log</a>
           </nav>
         </div>
         <div className="mt-auto border-t p-4">
@@ -324,13 +376,24 @@ export default function HomePage() {
 
           <section id="datasets" className="mt-7 grid gap-4 xl:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle>Create a dataset</CardTitle><CardDescription>Creates dataset version 1 with one test case. Add richer import tooling in a later slice.</CardDescription></CardHeader>
+              <CardHeader><CardTitle>Create or import a dataset</CardTitle><CardDescription>Create a one-case dataset or import the context-grounded abstention benchmark as immutable version 1.</CardDescription></CardHeader>
               <CardContent>
                 <form onSubmit={createDataset} className="space-y-3">
                   <label className="block text-xs font-medium">Dataset name<input required value={datasetName} onChange={(e) => setDatasetName(e.target.value)} className="mt-1.5 h-9 w-full rounded-lg border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200" /></label>
                   <label className="block text-xs font-medium">Test question<textarea required value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} className="mt-1.5 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200" /></label>
                   <label className="block text-xs font-medium">Expected answer (optional)<input value={expectedAnswer} onChange={(e) => setExpectedAnswer(e.target.value)} className="mt-1.5 h-9 w-full rounded-lg border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200" /></label>
                   <Button type="submit" disabled={busy || !datasetName.trim() || !question.trim()}><Database className="size-4" /> Create dataset</Button>
+                  <div className="rounded-lg border border-dashed p-3">
+                    <p className="text-xs font-medium">Import a JSONL benchmark</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Use datasets/abstention_context_v1.jsonl from the repository. Maximum file size: 1 MB.</p>
+                    <input
+                      type="file"
+                      accept=".jsonl,.ndjson,application/x-ndjson"
+                      disabled={busy}
+                      onChange={(event) => void importJsonlDataset(event)}
+                      className="mt-2 block w-full text-xs file:mr-3 file:rounded-md file:border file:bg-white file:px-3 file:py-1.5 file:text-xs file:font-medium"
+                    />
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -357,6 +420,16 @@ export default function HomePage() {
                   <label className="block text-xs font-medium">Experiment name<input required value={experimentName} onChange={(e) => setExperimentName(e.target.value)} className="mt-1.5 h-9 w-full rounded-lg border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-blue-200" /></label>
                   <label className="block text-xs font-medium">Dataset version<select required value={selectedDatasetVersion} onChange={(e) => setSelectedDatasetVersion(e.target.value)} className="mt-1.5 h-9 w-full rounded-lg border bg-white px-3 text-sm" ><option value="">Select a dataset</option>{datasets.filter((item) => item.latest_version_id).map((item) => <option key={item.id} value={item.latest_version_id!}>{item.name} · v{item.latest_version} · {item.test_case_count} cases</option>)}</select></label>
                   <label className="block text-xs font-medium">Model configuration<select required value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className="mt-1.5 h-9 w-full rounded-lg border bg-white px-3 text-sm"><option value="">Select a model</option>{models.filter((item) => item.is_enabled).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.model_id}</option>)}</select></label>
+                  <label className="block text-xs font-medium">Evaluation protocol
+                    <select value={evaluatorMethod} onChange={(e) => setEvaluatorMethod(e.target.value)} className="mt-1.5 h-9 w-full rounded-lg border bg-white px-3 text-sm">
+                      <option value="abstention_calibration_v1">Selective answering — may abstain</option>
+                      <option value="forced_answer_v1">Forced-answer baseline — must answer</option>
+                      <option value="normalized_exact_match">Normalized exact-match — simple QA</option>
+                    </select>
+                  </label>
+                  <p className="text-[11px] leading-4 text-muted-foreground">
+                    The first two protocols require context on every case and an answerability label. Use the JSONL research benchmark for those modes.
+                  </p>
                   <label className="block text-xs font-medium">System prompt<textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={2} className="mt-1.5 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200" /></label>
                   <Button type="submit" disabled={busy || !selectedDatasetVersion || !selectedModel}><FlaskConical className="size-4" /> Create experiment</Button>
                 </form>
@@ -398,20 +471,39 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="mb-4 grid gap-3 sm:grid-cols-4">
-                      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-muted-foreground">Test cases</p><p className="mt-1 text-xl font-semibold">{latestRun.summary.total_cases ?? 0}</p></div>
-                      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-muted-foreground">Scored</p><p className="mt-1 text-xl font-semibold">{latestRun.summary.scored ?? 0}</p></div>
-                      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-muted-foreground">Mean exact-match</p><p className="mt-1 text-xl font-semibold">{meanScoreText}</p></div>
-                      <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-muted-foreground">Provider errors</p><p className="mt-1 text-xl font-semibold">{latestRun.summary.errors ?? 0}</p></div>
-                    </div>
+{isUncertaintyRun ? (
+                      <>
+                        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          <MetricCard label="Coverage" value={percent(latestRun.summary.coverage)} note="Valid responses that attempted an answer" icon={Activity} />
+                          <MetricCard label="Decision accuracy" value={percent(latestRun.summary.decision_accuracy)} note="Correct answer-versus-abstain decisions" icon={ShieldCheck} />
+                          <MetricCard label="Unknown abstention recall" value={percent(latestRun.summary.unknown_abstention_recall)} note="Unknown cases correctly refused" icon={CheckCircle2} />
+                          <MetricCard label="False-answer rate" value={percent(latestRun.summary.false_answer_rate_on_unknown)} note="Unknown cases answered anyway" icon={CircleAlert} />
+                        </div>
+                        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          <MetricCard label="Answer accuracy" value={percent(latestRun.summary.answer_accuracy_on_attempted_answerable)} note="Exact match on attempted answerable cases" icon={CheckCircle2} />
+                          <MetricCard label="Unnecessary abstention" value={percent(latestRun.summary.unnecessary_abstention_rate)} note="Answerable cases refused" icon={ShieldCheck} />
+                          <MetricCard label="Brier score" value={numberText(latestRun.summary.confidence_brier_score)} note={`Confidence calibration · n=${latestRun.summary.confidence_calibration_sample_size ?? 0}`} icon={Activity} />
+                          <MetricCard label="ECE · 10 bins" value={numberText(latestRun.summary.confidence_ece_10bin)} note="Lower is better; small samples are noisy" icon={Activity} />
+                        </div>
+                        <p className="mb-4 text-[11px] leading-4 text-muted-foreground">Confidence calibration is computed only on attempted answers. Abstentions have no proposed answer and are excluded from Brier and ECE denominators.</p>
+                      </>
+                    ) : (
+                      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+                        <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-muted-foreground">Test cases</p><p className="mt-1 text-xl font-semibold">{latestRun.summary.total_cases ?? 0}</p></div>
+                        <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-muted-foreground">Scored</p><p className="mt-1 text-xl font-semibold">{latestRun.summary.scored ?? 0}</p></div>
+                        <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-muted-foreground">Mean exact-match</p><p className="mt-1 text-xl font-semibold">{meanScoreText}</p></div>
+                        <div className="rounded-lg bg-slate-50 p-3"><p className="text-[11px] text-muted-foreground">Provider errors</p><p className="mt-1 text-xl font-semibold">{latestRun.summary.errors ?? 0}</p></div>
+                      </div>
+                    )}
                     <div className="space-y-3">
                       {latestRun.results.map((result, index) => (
                         <div key={result.id} className="rounded-lg border p-4">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-xs font-semibold">Test case {index + 1}</p>
-                            <div className="flex items-center gap-2">
-                              <Badge>{result.failure_category || (result.score === 1 ? "matched" : "unscored")}</Badge>
-                              {result.score !== null && <span className="font-mono text-xs">{(result.score * 100).toFixed(0)}%</span>}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge>{result.failure_category || (result.abstained ? "abstained" : result.score === 1 ? "matched" : "unscored")}</Badge>
+                              {result.abstained !== null && <Badge>{result.abstained ? "Abstained" : "Answered"}</Badge>}
+                              {result.confidence !== null && <span className="font-mono text-xs">Confidence {(result.confidence * 100).toFixed(0)}%</span>}
                             </div>
                           </div>
                           <p className="mt-2 whitespace-pre-wrap text-sm">{result.model_output || result.error_message || "No output recorded."}</p>
@@ -425,7 +517,7 @@ export default function HomePage() {
               </CardContent>
             </Card>
           </section>
-          <footer className="mt-8 flex flex-col justify-between gap-2 border-t pt-4 text-[11px] text-muted-foreground sm:flex-row"><span>LLM Reliability Evaluation Harness · Research build 0.2.0</span><span>Scores are only produced for supported deterministic metrics.</span></footer>
+          <footer className="mt-8 flex flex-col justify-between gap-2 border-t pt-4 text-[11px] text-muted-foreground sm:flex-row"><span>LLM Reliability Evaluation Harness · Research build 0.3.0</span><span>Research outputs are measured against a versioned context benchmark.</span></footer>
         </div>
       </main>
     </div>
