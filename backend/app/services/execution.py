@@ -196,7 +196,7 @@ def execute_experiment(db: Session, experiment_id: UUID) -> EvaluationRun:
                         }
                     except UncertaintyResponseError as exc:
                         evaluation = {
-                            "score": 0.0,
+                            "score": None,
                             "confidence": None,
                             "abstained": None,
                             "failure_category": "invalid_response_format",
