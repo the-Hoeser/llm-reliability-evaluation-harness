@@ -22,7 +22,7 @@ const buttonVariants = cva(
   },
 );
 
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+type ButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "size"> &
   VariantProps<typeof buttonVariants> & { asChild?: boolean };
 
 export function Button({ className, variant, size, asChild = false, ...props }: ButtonProps) {
