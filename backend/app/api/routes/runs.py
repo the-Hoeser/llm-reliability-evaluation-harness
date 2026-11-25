@@ -43,7 +43,8 @@ def list_run_results(run_id: UUID, db: Session = Depends(get_db)) -> list[TestRe
     return list(
         db.scalars(
             select(TestResult)
+            .join(TestCase, TestCase.id == TestResult.test_case_id)
             .where(TestResult.run_id == run_id)
-            .order_by(TestResult.created_at, TestResult.id)
+            .order_by(TestCase.external_id)
         )
     )
