@@ -1,12 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.datasets import router as datasets_router
+from app.api.routes.experiments import router as experiments_router
 from app.api.routes.health import router as health_router
+from app.api.routes.models import router as models_router
+from app.api.routes.runs import router as runs_router
 from app.core.config import settings
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version="0.2.0",
     description="Research platform for evaluating and improving LLM reliability.",
 )
 
@@ -19,6 +23,10 @@ app.add_middleware(
 )
 
 app.include_router(health_router, prefix=settings.api_prefix)
+app.include_router(datasets_router, prefix=settings.api_prefix)
+app.include_router(models_router, prefix=settings.api_prefix)
+app.include_router(experiments_router, prefix=settings.api_prefix)
+app.include_router(runs_router, prefix=settings.api_prefix)
 
 
 @app.get("/", include_in_schema=False)
