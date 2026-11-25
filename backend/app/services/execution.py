@@ -1,6 +1,6 @@
 import json
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from statistics import mean
 from time import perf_counter
 from typing import Any
@@ -100,7 +100,7 @@ def execute_experiment(db: Session, experiment_id: UUID) -> EvaluationRun:
         model_config_snapshot=model_snapshot,
         evaluator_config_snapshot=evaluator_snapshot,
         summary={},
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
     )
     db.add(run)
     db.flush()
@@ -192,7 +192,7 @@ def execute_experiment(db: Session, experiment_id: UUID) -> EvaluationRun:
             else ("failed" if errors else "completed")
         )
         run.summary = summary
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         _event(
             db,
             run_id=run.id,
@@ -208,7 +208,7 @@ def execute_experiment(db: Session, experiment_id: UUID) -> EvaluationRun:
         current_run = db.get(EvaluationRun, run.id)
         if current_run is not None:
             current_run.status = "failed"
-            current_run.completed_at = datetime.now(timezone.utc)
+            current_run.completed_at = datetime.now(UTC)
             current_run.summary = {
                 "total_cases": len(test_cases),
                 "succeeded": succeeded,
